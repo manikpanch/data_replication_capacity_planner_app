@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Download, Activity, Database, Clock, Server, HelpCircle, Network, ServerCog, AlertTriangle, CheckCircle2, Ban } from 'lucide-react';
+import { Download, Activity, Database, Clock, Server, HelpCircle, Network, ServerCog, AlertTriangle, CheckCircle2, Ban, Lightbulb, TrendingUp, AlertOctagon } from 'lucide-react';
 import { MasterDataObject, TargetSystem, Mapping, GlobalConfig, MiddlewareCluster } from '../types';
 import { calculateSimulation, formatDuration, formatNumber } from '../services/calculator';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -24,6 +24,78 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
   );
   
   const isSync = config.integrationPattern === 'SYNC';
+
+  // --- Insight Generation Logic ---
+  const generateInsights = () => {
+    const insights: { type: 'info' | 'warning' | 'success', text: string }[] = [];
+    const limitingQueue = result.queues.reduce((prev, current) => (prev.completionTimeSeconds > current.completionTimeSeconds) ? prev : current, result.queues[0]);
+
+    if (!limitingQueue) return [];
+
+    if (isSync) {
+        // SYNC INSIGHTS
+        const totalThreadUsage = result.clusterHealth.reduce((sum, c) => sum + c.usedThreads, 0);
+        const totalCapacity = result.clusterHealth.reduce((sum, c) => sum + c.maxThreads, 0);
+        const utilization = (totalThreadUsage / totalCapacity) * 100;
+        const avgSplit = result.queues.reduce((sum, q) => sum + q.splitFactor, 0) / (result.queues.length || 1);
+
+        if (limitingQueue.isThreadBound) {
+             insights.push({
+                type: 'warning',
+                text: `Bottleneck: Middleware Thread Pool. The combination of high latency and packet splitting is exhausting available threads. MDG cannot open new connections because all threads are busy waiting for responses.`
+            });
+        } else {
+             insights.push({
+                type: 'info',
+                text: `Bottleneck: Target System Rate Limits. Your middleware clusters have plenty of spare capacity (${formatNumber(100 - utilization)}% free threads), but MDG is throttled because the Target Systems cannot accept data fast enough.`
+            });
+        }
+
+        if (avgSplit > 1.5) {
+             insights.push({
+                type: 'info',
+                text: `Packet Splitting Impact: On average, every 1 request from MDG requires ~${formatNumber(avgSplit)} calls to the Target. This multiplies the Round Trip Time, locking threads for longer durations.`
+            });
+        }
+
+    } else {
+        // ASYNC INSIGHTS
+        const totalStorage = result.totalStorageRequiredMB;
+        const storageLimit = result.clusterHealth.reduce((sum, c) => sum + c.maxStorageMB, 0);
+        
+        if (result.maxApiLoadRPS > limitingQueue.outboundProcessingRateRecordsPerSec / limitingQueue.effectiveTargetPacketSize) {
+             insights.push({
+                type: 'warning',
+                text: `Queue Buildup: Data is entering the middleware faster than it can leave. Queues will grow until the entire source volume is ingested, then drain slowly based on Target constraints.`
+            });
+        }
+
+        if (totalStorage > storageLimit) {
+             insights.push({
+                type: 'warning',
+                text: `Storage Critical: The estimated queue size (${formatNumber(totalStorage)} MB) exceeds the total cluster capacity (${formatNumber(storageLimit)} MB). Data loss or broker failure is likely.`
+            });
+        } else {
+             insights.push({
+                type: 'success',
+                text: `Storage Healthy: Peak queue accumulation is within limits. The middleware acts as a successful buffer between the fast Source and slow Target.`
+            });
+        }
+    }
+
+    // Throttling Check
+    const throttledCount = result.queues.filter(q => q.isThrottled).length;
+    if (throttledCount > 0) {
+        insights.push({
+            type: 'warning',
+            text: `Throttling Active: ${throttledCount} interfaces are being artificially slowed down by the "Middleware Ingress Limit" setting, which protects the cluster from overload.`
+        });
+    }
+
+    return insights;
+  };
+
+  const insights = generateInsights();
 
   const downloadReport = () => {
     const doc = new jsPDF();
@@ -166,6 +238,32 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Reasoning Summary Section */}
+      {insights.length > 0 && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 shadow-sm">
+            <h4 className="text-lg font-bold text-indigo-900 flex items-center gap-2 mb-3">
+                <Lightbulb className="w-5 h-5 text-indigo-600" /> 
+                Simulation Reasoning & Insights
+            </h4>
+            <div className="space-y-3">
+                {insights.map((insight, idx) => (
+                    <div key={idx} className="flex items-start gap-3 bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
+                        {insight.type === 'warning' ? (
+                             <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                        ) : insight.type === 'success' ? (
+                             <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                             <TrendingUp className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                        )}
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                            {insight.text}
+                        </p>
+                    </div>
+                ))}
+            </div>
+          </div>
+      )}
 
       {/* Cluster Health Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
