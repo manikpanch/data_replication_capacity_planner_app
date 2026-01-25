@@ -42,7 +42,7 @@ function App() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
+    <div className="min-h-screen bg-gray-50 pb-12 flex flex-col">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -60,7 +60,7 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         
         {/* Navigation Tabs */}
         <div className="flex space-x-4 mb-8 overflow-x-auto">
@@ -141,6 +141,10 @@ function App() {
         </div>
 
       </main>
+
+      <footer className="w-full text-center py-6 text-gray-400 text-sm border-t border-gray-200 bg-white">
+        Created by @manipancha for common usage
+      </footer>
     </div>
   );
 }

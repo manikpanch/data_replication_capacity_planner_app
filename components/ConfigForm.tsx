@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Plus, Trash2, HelpCircle, Clock, Zap, Upload, FileSpreadsheet, ShieldAlert, ServerCog, ArrowRightLeft, Spline } from 'lucide-react';
+import { Plus, Trash2, HelpCircle, Clock, Zap, Upload, FileSpreadsheet, ShieldAlert, ServerCog, ArrowRightLeft, Spline, Download } from 'lucide-react';
 import { MasterDataObject, TargetSystem, Mapping, GlobalConfig, MiddlewareCluster } from '../types';
 import { Tooltip } from './Tooltip';
 import * as XLSX from 'xlsx';
@@ -21,6 +21,87 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
   mdos, setMdos, targets, setTargets, clusters, setClusters, mappings, setMappings, config, setConfig
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- EXPORT / IMPORT HANDLERS ---
+  const handleExportConfig = () => {
+    const wb = XLSX.utils.book_new();
+
+    // 1. Global Config
+    const configSheet = XLSX.utils.json_to_sheet([config]);
+    XLSX.utils.book_append_sheet(wb, configSheet, "GlobalConfig");
+
+    // 2. Clusters
+    const clustersSheet = XLSX.utils.json_to_sheet(clusters);
+    XLSX.utils.book_append_sheet(wb, clustersSheet, "Clusters");
+
+    // 3. Targets
+    const targetsSheet = XLSX.utils.json_to_sheet(targets);
+    XLSX.utils.book_append_sheet(wb, targetsSheet, "Targets");
+
+    // 4. MDOs
+    const mdosSheet = XLSX.utils.json_to_sheet(mdos);
+    XLSX.utils.book_append_sheet(wb, mdosSheet, "MDOs");
+
+    // 5. Mappings
+    const mappingsSheet = XLSX.utils.json_to_sheet(mappings);
+    XLSX.utils.book_append_sheet(wb, mappingsSheet, "Mappings");
+
+    XLSX.writeFile(wb, "Middleware_Planner_Config.xlsx");
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+
+        // Helper to get data safely
+        const getData = <T,>(sheetName: string): T[] => {
+            const sheet = wb.Sheets[sheetName];
+            if (!sheet) return [];
+            return XLSX.utils.sheet_to_json(sheet) as T[];
+        };
+
+        // 1. Global Config
+        const importedConfig = getData<GlobalConfig>("GlobalConfig");
+        if (importedConfig.length > 0) {
+            setConfig(importedConfig[0]);
+        }
+
+        // 2. Clusters
+        const importedClusters = getData<MiddlewareCluster>("Clusters");
+        if (importedClusters.length > 0) setClusters(importedClusters);
+
+        // 3. Targets
+        const importedTargets = getData<TargetSystem>("Targets");
+        if (importedTargets.length > 0) setTargets(importedTargets);
+
+        // 4. MDOs
+        const importedMdos = getData<MasterDataObject>("MDOs");
+        if (importedMdos.length > 0) setMdos(importedMdos);
+
+        // 5. Mappings
+        const importedMappings = getData<Mapping>("Mappings");
+        if (importedMappings.length > 0) setMappings(importedMappings);
+
+        alert("Configuration imported successfully!");
+      } catch (error) {
+        console.error("Import error:", error);
+        alert("Failed to import configuration. Please check the file format.");
+      }
+    };
+    reader.readAsBinaryString(file);
+    
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
+  };
+
 
   // --- MDO HANDLERS ---
   const addMdo = () => {
@@ -121,6 +202,29 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
   return (
     <div className="space-y-8 p-6 bg-white rounded-xl shadow-sm border border-gray-100">
       
+      {/* Action Bar */}
+      <div className="flex justify-end gap-3 pb-4 border-b border-gray-100">
+        <input 
+            type="file" 
+            ref={fileInputRef} 
+            className="hidden" 
+            accept=".xlsx, .xls"
+            onChange={handleImportConfig}
+        />
+        <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition shadow-sm"
+        >
+            <Upload className="w-4 h-4" /> Import Config
+        </button>
+        <button
+            onClick={handleExportConfig}
+            className="flex items-center gap-2 bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition shadow-sm"
+        >
+            <Download className="w-4 h-4" /> Export Config
+        </button>
+      </div>
+
       {/* Global Config */}
       <section>
         <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">

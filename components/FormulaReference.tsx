@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Database, Clock, ArrowRight, Network, Zap, ShieldAlert } from 'lucide-react';
+import { Activity, Database, Clock, ArrowRight, Network, Zap, ShieldAlert, Split, ServerCog } from 'lucide-react';
 
 export const FormulaReference: React.FC = () => {
   return (
@@ -8,139 +8,126 @@ export const FormulaReference: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Calculation Logic & Formulas</h2>
         <p className="text-gray-600 mb-8 border-b border-gray-100 pb-6">
           The application simulates the data replication process by modeling the flow from the Source System (MDG)
-          through the Middleware to Target Systems. Below is a breakdown of the variables and formulas used to generate the results.
+          through the Middleware to Target Systems. With the introduction of packet splitting and cluster limits, the logic follows these steps:
         </p>
 
         <div className="space-y-10">
+
+            {/* Section 0: Packet Splitting */}
+            <section className="space-y-4">
+                <h3 className="text-lg font-semibold text-indigo-600 flex items-center gap-2">
+                    <Split className="w-5 h-5" /> 1. Packet Optimization & Splitting
+                </h3>
+                <p className="text-sm text-gray-600">
+                    If the Source (MDG) sends packets larger than what the Target System accepts, the Middleware must split the message.
+                    This acts as a multiplier for downstream processing time.
+                </p>
+                <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <p className="font-medium text-gray-900">Effective Target Packet</p>
+                            <code className="block bg-gray-900 text-gray-100 p-2 rounded text-xs font-mono mt-1">
+                               MIN(Source_Packet_Size, Target_Max_Packet_Size)
+                            </code>
+                        </div>
+                        <div>
+                            <p className="font-medium text-gray-900">Split Factor (Calls per MDG Request)</p>
+                            <code className="block bg-gray-900 text-gray-100 p-2 rounded text-xs font-mono mt-1">
+                               CEIL(Source_Packet_Size / Effective_Target_Packet)
+                            </code>
+                        </div>
+                    </div>
+                </div>
+            </section>
             
-            {/* Section 1: Inbound */}
+            {/* Section 2: Async Logic */}
             <section className="space-y-4">
                 <h3 className="text-lg font-semibold text-indigo-600 flex items-center gap-2">
-                    <Activity className="w-5 h-5" /> 1. Source System Inbound Load (MDG → Middleware)
+                    <Database className="w-5 h-5" /> 2. Asynchronous Mode (Queued) Logic
                 </h3>
                 <p className="text-sm text-gray-600">
-                    Inbound Load is calculated <strong>per target interface</strong>. MDG allocates a pool of threads for each target system connection.
+                    In Async mode, MDG fires and forgets. The Middleware absorbs the load into queues.
                 </p>
                 <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4">
                     <div>
-                        <div className="flex justify-between items-baseline mb-1">
-                            <p className="font-medium text-gray-900">Step A: Theoretical Max Speed (Per Interface)</p>
-                        </div>
+                        <p className="font-medium text-gray-900">Inbound Rate (MDG → Queue)</p>
                         <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
-                           (1000 / Avg_Middleware_Response_Time_ms) * MDG_Concurrency_Threads
+                           MIN( (1000/Middleware_Overhead_ms) * Threads, Middleware_Ingress_Limit )
                         </code>
                     </div>
-
                     <div>
-                         <div className="flex justify-between items-baseline mb-1">
-                            <p className="font-medium text-gray-900 flex items-center gap-2">
-                                Step B: Middleware Rate Limiting (Optional) <ShieldAlert className="w-4 h-4 text-orange-500" />
-                            </p>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-2">
-                            If Middleware Rate Limiting is enabled for a specific target, the Inbound RPS is capped.
-                        </p>
+                        <p className="font-medium text-gray-900">Outbound Rate (Queue → Target)</p>
+                        <p className="text-xs text-gray-500 mb-1">Limited by Target RPM and the effective packet size it can accept.</p>
                         <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
-                           Effective_Inbound_RPS = MIN( Theoretical_Max_Speed, Middleware_Limit_RPM / 60 )
+                           (Target_RPM / 60) * Effective_Target_Packet
                         </code>
                     </div>
-
                     <div>
-                        <p className="font-medium text-gray-900">Step C: Inbound Ingestion Rate</p>
+                        <p className="font-medium text-gray-900">Queue Accumulation</p>
                         <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
-                           Effective_Inbound_RPS * Packet_Size
+                           MAX(0, Inbound_Rate_Recs - Outbound_Rate_Recs) * Total_Ingestion_Time
                         </code>
                     </div>
                 </div>
             </section>
 
-            {/* Section 2: Outbound */}
-            <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-indigo-600 flex items-center gap-2">
-                    <ArrowRight className="w-5 h-5" /> 2. Target System Consumption (Middleware → Target)
-                </h3>
-                <p className="text-sm text-gray-600">
-                    Calculates how fast data leaves the middleware based on API rate limits.
-                </p>
-                <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4">
-                    <div>
-                        <p className="font-medium text-gray-900">Outbound Processing Rate (Records/sec)</p>
-                        <p className="text-xs text-gray-500 mb-2">Derived from the Target System's API Rate Limit (Requests Per Minute).</p>
-                        <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
-                           (Target_API_Rate_Limit_RPM / 60) * Packet_Size
-                        </code>
-                    </div>
-                </div>
-            </section>
-
-             {/* Section 3: Queue */}
+             {/* Section 3: Sync Logic */}
              <section className="space-y-4">
                 <h3 className="text-lg font-semibold text-indigo-600 flex items-center gap-2">
-                    <Database className="w-5 h-5" /> 3. Queue Capacity & Storage
+                    <ArrowRight className="w-5 h-5" /> 3. Synchronous Mode (Request-Reply) Logic
                 </h3>
                 <p className="text-sm text-gray-600">
-                    Queues accumulate per target when the specific interface Inbound Rate is faster than the Target's Consumption Rate.
+                    In Sync mode, MDG waits. The Middleware must sequentially call the Target `Split_Factor` times before responding to MDG.
                 </p>
                 <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4">
                     <div>
-                        <p className="font-medium text-gray-900">Max Queue Depth (Records)</p>
-                        <p className="text-xs text-gray-500 mb-2">
-                             Calculated only if Effective Inbound Rate &gt; Outbound Rate.
-                        </p>
+                         <p className="font-medium text-gray-900">Total Round Trip Time (RTT)</p>
+                         <p className="text-xs text-gray-500 mb-1">Time an MDG Thread is locked waiting for response.</p>
                         <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
-                           (Effective_Inbound_Rate - Outbound_Rate) * Ingestion_Duration
+                           Middleware_Overhead + (Split_Factor * (60 / Target_RPM))
                         </code>
                     </div>
-                </div>
-            </section>
-
-             {/* Section 4: Network & Time */}
-             <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-indigo-600 flex items-center gap-2">
-                    <Clock className="w-5 h-5" /> 4. Network & Timelines
-                </h3>
-                <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4">
                     <div>
+                        <p className="font-medium text-gray-900">Effective Throughput</p>
+                        <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
+                           MIN( MDG_Threads / Total_RTT, (Target_RPM/60)/Split_Factor )
+                        </code>
+                    </div>
+                     <div>
                         <p className="font-medium text-gray-900 flex items-center gap-2">
-                             <Network className="w-4 h-4 text-gray-500" /> Required Network Throughput (MB/s)
+                            <ShieldAlert className="w-4 h-4 text-orange-500" /> Thread Utilization
                         </p>
-                        <p className="text-xs text-gray-500 mb-2">Sum of bandwidth across all active target interfaces.</p>
                         <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
-                           (SUM(Effective_Inbound_RPS_All_Targets) * Max_Packet_Payload_KB) / 1024
+                           Throughput_RPS * Total_RTT
                         </code>
+                        <p className="text-xs text-red-500 mt-1">High Split Factors drastically increase RTT, exhausting MDG threads quickly.</p>
                     </div>
                 </div>
             </section>
 
-             {/* Section 5: Replication Modes */}
+             {/* Section 4: Cluster & Network */}
              <section className="space-y-4">
                 <h3 className="text-lg font-semibold text-indigo-600 flex items-center gap-2">
-                    <Zap className="w-5 h-5" /> 5. Replication Modes (Realtime vs Scheduled)
+                    <ServerCog className="w-5 h-5" /> 4. Cluster & Network Health
                 </h3>
                 <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 space-y-4">
-                    <p className="text-sm text-gray-600 mb-4">
-                        The calculator handles "Realtime" and "Scheduled" modes identically regarding queue consumption, 
-                        modeling the Middleware as an <strong>always-on listener</strong>. The difference lies in how the data arrival (Source) is conceptualized.
-                    </p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-white p-4 rounded border border-gray-200">
-                            <p className="font-semibold text-gray-900 mb-2">Realtime Replication</p>
-                            <p className="text-xs text-gray-500">
-                                <strong>Scenario:</strong> Individual records are sent continuously.
-                                <br/><br/>
-                                <strong>Calculation Interpretation:</strong> The "Volume" input is treated as a <strong>Peak Load Test</strong> (e.g. 500k records during a busy hour or initial migration). The calculator estimates if the queue can drain fast enough to handle this specific surge.
-                            </p>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                             <p className="font-medium text-gray-900">Cluster Utilization</p>
+                             <ul className="list-disc list-inside text-sm text-gray-600 mt-2 space-y-1">
+                                 <li><strong>Threads:</strong> Sum of used threads across all targets assigned to the cluster.</li>
+                                 <li><strong>Queues:</strong> Count of active async interfaces.</li>
+                                 <li><strong>Storage:</strong> Sum of Peak Queue Size (MB) for all async queues.</li>
+                             </ul>
                         </div>
-                        <div className="bg-white p-4 rounded border border-gray-200">
-                            <p className="font-semibold text-gray-900 mb-2">Scheduled (Batch) Replication</p>
-                            <p className="text-xs text-gray-500">
-                                <strong>Scenario:</strong> Records accumulate and are pushed in a batch every interval (e.g. 15 mins).
-                                <br/><br/>
-                                <strong>Calculation Interpretation:</strong> The Source pushes the entire batch ("Volume") as fast as possible (burst). The Middleware <strong>immediately</strong> begins consuming this queue based on the Target API Rate Limit. It does not wait for the interval to finish.
-                            </p>
+                        <div>
+                             <p className="font-medium text-gray-900">Network Bandwidth</p>
+                             <code className="block bg-gray-900 text-gray-100 p-2 rounded text-xs font-mono mt-1">
+                                (Total_Inbound_RPS * Source_Packet_KB) / 1024
+                             </code>
+                             <p className="text-xs text-gray-500 mt-1">Calculated based on the heavy Source Packet size before splitting.</p>
                         </div>
-                    </div>
+                     </div>
                 </div>
             </section>
 
