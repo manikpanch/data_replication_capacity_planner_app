@@ -1,0 +1,5 @@
+{
+  "name": "Master Data Replication Planner",
+  "description": "A calculator for API load, queue capacity, and replication timelines for SAP MDG middleware scenarios.",
+  "requestFramePermissions": []
+}
