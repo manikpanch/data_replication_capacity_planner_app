@@ -134,12 +134,14 @@ export const calculateSimulation = (
 
             // 4. Bottleneck Analysis
             theoreticalInboundRPS = Math.min(maxMdgRpsByThreads, maxMdgRpsByTarget);
-            
             effectiveInboundRPS = theoreticalInboundRPS;
             isThreadBound = maxMdgRpsByThreads < maxMdgRpsByTarget;
 
-            // ActiveThreads = RPS * RTT
-            usedThreads = effectiveInboundRPS * totalRTTSeconds;
+            // 5. Thread Usage
+            // In Sync mode, if MDG opens a connection, the Middleware holds a thread
+            // regardless of whether it's processing or waiting on the Target.
+            // Therefore, Used Threads = Allocated Concurrency from MDG.
+            usedThreads = config.mdgConcurrency;
             
             if (target.middlewareRateLimitEnabled && target.middlewareIngressRPM) {
                 middlewareLimitRPS = target.middlewareIngressRPM / 60;
@@ -158,7 +160,7 @@ export const calculateSimulation = (
             maxQueueDepthRecords = 0;
             maxQueueStorageMB = 0;
 
-            // 5. Cluster Usage Update (Sync)
+            // 6. Cluster Usage Update (Sync)
             if (cluster) {
                 const usage = clusterUsage.get(cluster.id);
                 if (usage) {

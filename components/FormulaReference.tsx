@@ -98,9 +98,12 @@ export const FormulaReference: React.FC = () => {
                             <ShieldAlert className="w-4 h-4 text-orange-500" /> Thread Utilization
                         </p>
                         <code className="block bg-gray-900 text-gray-100 p-3 rounded text-sm font-mono">
-                           Throughput_RPS * Total_RTT
+                           = MDG_Threads (Configured Concurrency)
                         </code>
-                        <p className="text-xs text-red-500 mt-1">High Split Factors drastically increase RTT, exhausting MDG threads quickly.</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            In Sync mode, if MDG opens a connection, the Middleware holds a thread even if waiting for a slow target. 
+                            The calculator assumes allocated capacity (worst-case) rather than just active processing time.
+                        </p>
                     </div>
                 </div>
             </section>
@@ -115,7 +118,7 @@ export const FormulaReference: React.FC = () => {
                         <div>
                              <p className="font-medium text-gray-900">Cluster Utilization</p>
                              <ul className="list-disc list-inside text-sm text-gray-600 mt-2 space-y-1">
-                                 <li><strong>Threads:</strong> Sum of used threads across all targets assigned to the cluster.</li>
+                                 <li><strong>Threads:</strong> Sum of allocated threads (MDG Concurrency) across all targets assigned to the cluster.</li>
                                  <li><strong>Queues:</strong> Count of active async interfaces.</li>
                                  <li><strong>Storage:</strong> Sum of Peak Queue Size (MB) for all async queues.</li>
                              </ul>
